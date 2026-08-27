@@ -1,0 +1,7 @@
+/kernels/*
+/results/*
+*png
+*.img
+*.gz
+cyclictest
+.txt
