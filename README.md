@@ -32,7 +32,7 @@ cd ../
 sudo qemu-system-x86_64 \
     -kernel kernels/linux-7.2-rt/arch/x86/boot/bzImage \
     -initrd test.gz \
-    -append "root=/dev/sda2 rw console=ttyS0 idle=poll processor.max_cstate=0 tsc=reliable" \
+    -append "root=/dev/sda rw console=ttyS0 idle=poll processor.max_cstate=0 tsc=reliable" \
     -m 2G \
     -object memory-backend-file,id=mem,size=2G,mem-path=/dev/hugepages,share=on,prealloc=yes \
     -machine pc,memory-backend=mem \
