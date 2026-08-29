@@ -5,6 +5,19 @@ WORKDIR="./tmp"
 OUTPUT="test.gz"
 TINYFS="tinyfs.gz"
 WASM_RUNTIME="WasmEdge-0.17.1-ubuntu20.04_x86_64.tar.gz"
+CONTAINER_ID="" # Initialize so the trap doesn't fail on unbound variable
+
+# ------------------------------------------------------------
+# Cleanup Handler (Guarantees execution on success or failure)
+# ------------------------------------------------------------
+cleanup() {
+    echo "Cleaning up temporary assets..."
+    rm -rf "${WORKDIR}" wasmedge_extracted mod.gz u20_libs
+    if [ -n "${CONTAINER_ID}" ]; then
+        docker rm -f "${CONTAINER_ID}" > /dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
 
 if ! command -v docker &> /dev/null; then
     echo "Error: Docker is required to fetch the correct Ubuntu 20.04 libraries."
@@ -19,8 +32,7 @@ if [ ! -f "${WASM_RUNTIME}" ]; then
     wget -qO "${WASM_RUNTIME}" "https://github.com/WasmEdge/WasmEdge/releases/download/0.17.1/${WASM_RUNTIME}"
 fi
 
-# Clean and extract
-rm -rf "${WORKDIR}" wasmedge_extracted mod.gz "${OUTPUT}" u20_libs
+# Extract
 mkdir -p wasmedge_extracted
 tar -xzf "${WASM_RUNTIME}" -C wasmedge_extracted
 
@@ -45,16 +57,18 @@ CONTAINER_ID=$(docker run -d ubuntu:20.04 sleep 60)
 
 # Ensure packages are installed in the container
 docker exec "$CONTAINER_ID" apt-get update -qq
-docker exec "$CONTAINER_ID" apt-get install -y -qq zlib1g libtinfo6 libstdc++6
+docker exec "$CONTAINER_ID" apt-get install -y -qq zlib1g libtinfo6 libstdc++6 stress
 
-# Extract the libraries (-L ensures we copy the real .so files, not symlinks)
+# Extract the libraries
 docker cp -L "$CONTAINER_ID":/lib/x86_64-linux-gnu/libz.so.1 u20_libs/
 docker cp -L "$CONTAINER_ID":/lib/x86_64-linux-gnu/libtinfo.so.6 u20_libs/
 docker cp -L "$CONTAINER_ID":/usr/lib/x86_64-linux-gnu/libstdc++.so.6 u20_libs/
 docker cp -L "$CONTAINER_ID":/lib/x86_64-linux-gnu/libgcc_s.so.1 u20_libs/
 
-# Destroy the temporary container
-docker rm -f "$CONTAINER_ID" > /dev/null
+# Ensure the bin directory exists before copying the stress tool
+mkdir -p "${WORKDIR}/bin"
+docker cp -L "$CONTAINER_ID":/usr/bin/stress "${WORKDIR}/bin/stress"
+chmod +x "${WORKDIR}/bin/stress"
 
 echo "Injecting Ubuntu 20.04 libraries into WasmEdge..."
 cp u20_libs/* "$WASM_LIB_DIR/"
@@ -69,6 +83,6 @@ find . -print0 | cpio --null -H newc -o --quiet | gzip > ../mod.gz
 popd > /dev/null
 
 cat "${TINYFS}" mod.gz > "${OUTPUT}"
-rm -rf "${WORKDIR}" wasmedge_extracted mod.gz u20_libs
 
 echo "Initramfs ready: ${OUTPUT}"
+# The cleanup function will automatically run right after this line.
