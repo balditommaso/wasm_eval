@@ -5,6 +5,6 @@
 *.img
 *.gz
 cyclictest
-.txt
-.wasm
+*.txt
+*.wasm
 .vscode
