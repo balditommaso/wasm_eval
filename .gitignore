@@ -6,3 +6,5 @@
 *.gz
 cyclictest
 .txt
+.wasm
+.vscode

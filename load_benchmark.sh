@@ -22,7 +22,7 @@ fi
 
 echo "Unmounting image..."
 sudo umount "$MOUNT_DIR"
-rmdir "$MOUNT_DIR"
+sudo rm -rf "$MOUNT_DIR"
 
 echo "Resetting/cleaning image for the next benchmark run..."
 # Completely wipe and re-initialize the raw image so it starts fresh

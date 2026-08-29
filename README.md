@@ -53,4 +53,8 @@ sudo ./cyclictest -p 99 -m -i 1000 -D 60s > /mnt/data/baseline.txt
 sudo umount /mnt/data
 ```
 
+TODO: 
+- add stress in backgrount 
+- try a different runtime for web-assembly
+
 

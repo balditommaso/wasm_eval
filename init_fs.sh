@@ -60,7 +60,7 @@ echo "Injecting Ubuntu 20.04 libraries into WasmEdge..."
 cp u20_libs/* "$WASM_LIB_DIR/"
 
 # Add your benchmarks
-cp cyclictest hello.wasm "${WORKDIR}/root/"
+cp cyclictest cyclictest.wasm "${WORKDIR}/root/"
 chmod +x "${WORKDIR}/root/cyclictest"
 
 # Build initramfs
