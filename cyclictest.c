@@ -22,7 +22,7 @@ static inline int64_t calcdiff_ns(struct timespec t1, struct timespec t2) {
 }
 
 int main(int argc, char **argv) {
-    struct timespec now, next, interval, sleep_time;
+    struct timespec now, next, interval;
     int max_cycles = 60000;     
     int interval_us = 1000;      
     
@@ -45,23 +45,16 @@ int main(int argc, char **argv) {
     printf("# Interval: %d us | Loops: %d\n", interval_us, max_cycles);
     printf("# Cycle_Count Latency_us\n");
 
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    next = now;
+    // Initialize the starting time
+    clock_gettime(CLOCK_MONOTONIC, &next);
     next.tv_sec += interval.tv_sec;
     next.tv_nsec += interval.tv_nsec;
     tsnorm(&next);
 
     for (int i = 0; i < max_cycles; i++) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);         
         clock_gettime(CLOCK_MONOTONIC, &now);
-        int64_t sleep_ns = calcdiff_ns(next, now);
-        
-        if (sleep_ns > 0) {
-            sleep_time.tv_sec = sleep_ns / NSEC_PER_SEC;
-            sleep_time.tv_nsec = sleep_ns % NSEC_PER_SEC;
-            nanosleep(&sleep_time, NULL);
-        }
 
-        clock_gettime(CLOCK_MONOTONIC, &now);
         int64_t diff_ns = calcdiff_ns(now, next);
         long diff_us = diff_ns / 1000;
 

@@ -1,60 +1,110 @@
-# Real-Time evaluation of `Web-Assembly`
------------------------
+# Real-Time Evaluation of WebAssembly Runtimes
 
-## Setup
-1. run `setup_rt_linux.sh` to download the version 7.2 of the Linux kernel and the relative real-time patch. The script patch the kernel and enable PREEMPT-RT.
+This repository contains the benchmarking infrastructure for evaluating the performance overhead introduced by WebAssembly (WASM) runtimes in real-time Linux environments. The focus is on measuring latency jitter using a WASM-compiled version of `cyclictest`.
 
-2. Compile the kernel:
-```
-make -j8
-```
+## Overview
 
-3. Initialize the submodules of this repo:
-```
-git submodule init
-```
+The goal of this project is to quantify the impact of WASM runtimes (such as [WasmEdge](https://wasmedge.org/)) on the deterministic behavior required for real-time tasks. We measure the latency spikes (jitter) that occur when running periodic tasks within a WASM execution environment on a Linux kernel patched with `PREEMPT_RT`.
 
-4. Compile staically the `cyclictest`:
-```
-cd rt-tests
-make NUMA=0 LDFLAGS="-static" cyclictest  
-mv cyclictest ../
-cd ../
-```
+## Key Components
 
-5. copy the executable file in the filesystem which will be used by QEMU:
-```
-./init_fs.sh
-```
+- **`cyclictest.c`**: A custom C-based latency measurement tool that simulates periodic task execution. It is compiled to `.wasm` using the `wasi-sdk`.
+- **`parse_cyclictest.py`**: A utility to parse the raw text output from the `cyclictest` runs into structured CSV files for analysis.
+- **`plot.ipynb`**: A Jupyter Notebook used to generate Cumulative Distribution Function (CDF) plots and other visualizations to compare the latency profiles of different runtimes and configurations.
 
-6. Start QEMU:
+## Prerequisites
+
+- A Linux environment (preferably with access to `sudo` for kernel/mounting operations).
+- **WASI SDK**: [wasi-sdk-34.0-x86_64-linux](https://github.com/WebAssembly/wasi-sdk) (included in this repo).
+- **WebAssembly Runtime**: WasmEdge.
+- **Tools**: `stress-ng`.
+
+## Experimental env
+
+Experiments have been accomplished on Ubuntu 24 with real-time kernel:
+ `linux-image-realtime 6.8.1-1015.16 amd64`
+
+## Getting Started
+
+### 1. Prepare the Real-Time Environment
+
+Run the provided script to intsall the stress tool used in our benchmarks.
 ```
-sudo qemu-system-x86_64 \
-    -kernel kernels/linux-7.2-rt/arch/x86/boot/bzImage \
-    -initrd test.gz \
-    -append "root=/dev/sda rw console=ttyS0 idle=poll processor.max_cstate=0 tsc=reliable" \
-    -m 2G \
-    -object memory-backend-file,id=mem,size=2G,mem-path=/dev/hugepages,share=on,prealloc=yes \
-    -machine pc,memory-backend=mem \
-    -smp 2,sockets=1,cores=2,threads=1 \
-    -nographic \
-    -enable-kvm \
-    -cpu host,migratable=no,+invtsc \
-    -name debug-threads=on \
-    -drive file=benchmark.img,format=raw,media=disk
+sudo apt instal stress-ng
 ```
 
-7. Mount the shared FS and run the test:
+### 2. Compile the Baseline and WebAssembly Benchmark
+
+The benchmark is written in C and must be compiled both with `gcc` and with the WASI SDK.
+
 ```
-mkdir -p /mnt/data
-sudo mount /dev/sda /mnt/data
-cd /
-sudo ./cyclictest -p 99 -m -i 1000 -D 60s > /mnt/data/baseline.txt
-sudo umount /mnt/data
+gcc cyclictest.c -o cyclictest --static 
 ```
 
-TODO: 
-- add stress in backgrount 
-- try a different runtime for web-assembly
+```
+./wasi-sdk-34.0-x86_64-linux/bin/clang \
+  --sysroot=./wasi-sdk-34.0-x86_64-linux/share/wasi-sysroot \
+  -o cyclictest_aot.wasm cyclictest.c
+```
+
+### 3. Running Experiments
+
+Experiments are typically conducted by executing the `.wasm` module via a runtime (e.g., `wasmedge`) on the target RT-patched system. Different configurations are tested, including:
+- **AOT (Ahead-of-Time) Compilation**
+- **JIT (Just-in-Time) Compilation**
+
+- **Baseline (Native/No WASM overhead)**
+- **Stress testing**: Running the benchmark under system load to observe impact on determinism.
+
+
+### 4. Data Analysis and Visualization
+
+Once the results are extracted, you can process the raw trace files into CSV format:
+
+```bash
+python3 parse_cyclictest.py <path_to_trace_file> <output_file.csv>
+```
+
+Finally, open `plot.ipynb` in a Jupyter environment to generate the comparison plots.
+
+## Results
+
+The `results/` directory contains the processed data (CSV) and raw traces used for the final evaluation. 
+
+```
+sudo chrt -f 99 ./cyclictest 600000 1000 > results/baseline.txt
+```
+
+```
+sudo chrt -f 99 wasmedge/bin/wasmedge --run-mode=jit cyclictest.wasm 600000 1000 > results/wasmedge_JIT.txt
+```
+
+```
+sudo chrt -f 99 wasmedge/bin/wasmedge cyclictest.wasm 600000 1000 > results/wasmedge_AOT.txt
+```
+
+```
+stress-ng --cpu $(nproc) --io 4 --vm 2 --vm-bytes 1G --timeout 15m & sudo chrt -f 99 ./cyclictest 600000 1000 > results/baseline_with_stress.txt
+```
+
+```
+stress-ng --cpu $(nproc) --io 4 --vm 2 --vm-bytes 1G --timeout 15m & sudo chrt -f 99 wasmedge/bin/wasmedge --run-mode=jit cyclictest.wasm 600000 1000 > results/wasmedge_JIT_with_stress.txt
+```
+
+```
+stress-ng --cpu $(nproc) --io 4 --vm 2 --vm-bytes 1G --timeout 15m & sudo chrt -f 99 wasmedge/bin/wasmedge cyclictest.wasm 600000 1000 > results/wasmedge_AOT_with_stress.txt
+```
+
+### convert the benchmarks in CSV 
+
+```
+python parse_cyclictest.py results/baseline.txt results/baseline.csv
+python parse_cyclictest.py results/wasmedge_JIT.txt results/wasmedge_JIT.csv
+python parse_cyclictest.py results/wasmedge_AOT.txt results/wasmedge_AOT.csv
+
+python parse_cyclictest.py results/baseline_with_stress.txt results/baseline_with_stress.csv
+python parse_cyclictest.py results/wasmedge_AOT_with_stress.txt results/wasmedge_AOT_with_stress.csv
+python parse_cyclictest.py results/wasmedge_JIT_with_stress.txt results/wasmedge_JIT_with_stress.csv
+```
 
 

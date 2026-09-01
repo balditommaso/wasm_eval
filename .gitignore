@@ -1,6 +1,7 @@
 /kernels/*
 /results/*
 /wasi-sdk-34.0-x86_64-linux/*
+wasmedge/*
 *png
 *.img
 *.gz
