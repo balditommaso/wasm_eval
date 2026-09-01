@@ -16,7 +16,7 @@ The goal of this project is to quantify the impact of WASM runtimes (such as [Wa
 
 - A Linux environment (preferably with access to `sudo` for kernel/mounting operations).
 - **WASI SDK**: [wasi-sdk-34.0-x86_64-linux](https://github.com/WebAssembly/wasi-sdk) (included in this repo).
-- **WebAssembly Runtime**: WasmEdge.
+- **WebAssembly Runtime**: [WasmEdge](https://github.com/WasmEdge/WasmEdge/releases/download/0.17.0/WasmEdge-0.17.0-ubuntu20.04_x86_64.tar.gz).
 - **Tools**: `stress-ng`.
 
 ## Experimental env
