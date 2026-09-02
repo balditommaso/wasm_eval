@@ -57,20 +57,6 @@ Experiments are typically conducted by executing the `.wasm` module via a runtim
 - **Stress testing**: Running the benchmark under system load to observe impact on determinism.
 
 
-### 4. Data Analysis and Visualization
-
-Once the results are extracted, you can process the raw trace files into CSV format:
-
-```bash
-python3 parse_cyclictest.py <path_to_trace_file> <output_file.csv>
-```
-
-Finally, open `plot.ipynb` in a Jupyter environment to generate the comparison plots.
-
-## Results
-
-The `results/` directory contains the processed data (CSV) and raw traces used for the final evaluation. 
-
 ```
 sudo chrt -f 99 ./cyclictest 600000 1000 > results/baseline.txt
 ```
@@ -95,7 +81,15 @@ stress-ng --cpu $(nproc) --io 4 --vm 2 --vm-bytes 1G --timeout 15m & sudo chrt -
 stress-ng --cpu $(nproc) --io 4 --vm 2 --vm-bytes 1G --timeout 15m & sudo chrt -f 99 wasmedge/bin/wasmedge cyclictest.wasm 600000 1000 > results/wasmedge_AOT_with_stress.txt
 ```
 
-### convert the benchmarks in CSV 
+### 4. Data Analysis and Visualization
+
+Once the results are extracted, you can process the raw trace files into CSV format:
+
+```bash
+python3 parse_cyclictest.py <path_to_trace_file> <output_file.csv>
+```
+
+Finally, open `plot.ipynb` in a Jupyter environment to generate the comparison plots.
 
 ```
 python parse_cyclictest.py results/baseline.txt results/baseline.csv
@@ -106,5 +100,36 @@ python parse_cyclictest.py results/baseline_with_stress.txt results/baseline_wit
 python parse_cyclictest.py results/wasmedge_AOT_with_stress.txt results/wasmedge_AOT_with_stress.csv
 python parse_cyclictest.py results/wasmedge_JIT_with_stress.txt results/wasmedge_JIT_with_stress.csv
 ```
+
+## Results
+
+The `results/` directory contains the processed data (CSV) and raw traces used for the final evaluation.
+
+### CDF of Latency Jitter
+
+![CDF of latency jitter](image/cdf.png)
+
+### Maximum Latency
+
+![Maximum latency](image/max.png)
+
+## Interpretation
+
+As expected, across all six configurations the native baseline is clearly the most deterministic: its latency is essentially bounded (~1 µs median, ~4 µs at p99, ~23 µs max), because the periodic task runs directly on the RT kernel without any intermediate layer.
+
+Wrapping the same task in a WebAssembly runtime shifts the entire distribution upward. The WASM configurations show a ~4 µs median (vs. 1 µs for native) and a much fatter tail: p99 rises from ~4 µs (native) to ~20 µs, and the worst observed spikes reach tens to a few hundred µs. 
+
+A few observations are worth highlighting:
+
+- **JIT vs. AOT.** The two WasmEdge execution modes behave closely together. In this setup AOT is even slightly tighter in the tail (max ≈ 71 µs vs. 94 µs for JIT, and max ≈ 76 µs vs. 165 µs under stress). This is consistent with AOT producing stable, fully-optimized code up front, whereas JIT spends time compiling while running, so its early samples and occasional deoptimization/recompilation events can produce larger, more erratic spikes.
+- **Effect of system load.** The `_with_stress` runs (with `stress-ng` saturating CPU, IO, and memory) confirm that the WASM overhead is most visible under contention. The median roughly triples (e.g. native ~1→3 µs, JIT ~4→10 µs), and the tail grows the most for JIT, which is the least "fixed" execution mode. Native code, by contrast, stays close to its unloaded profile, which is exactly the property real-time tasks need.
+- **Tail, not the mean, is the real-time risk.** Because real-time guarantees depend on the *worst case*, the CDF's right tail is the critical region: it is where the native baseline stays flat (≤ ~30 µs) while the WASM configurations continue to climb. This is the overhead that a WCET analysis of a WASM-compiled real-time task must account for.
+
+In short, the results quantify a real but bounded penalty for running real-time workloads under WebAssembly: a few extra microseconds in the typical case, and a significantly larger, less predictable tail in the worst case — especially for JIT and under system load. 
+
+
+
+
+
 
 
